@@ -1,64 +1,94 @@
-const CONFIG={"id":271,"slug":"sos-roteador-wifi","name":"SOS Roteador Wi-Fi","description":"Siga verificações externas para energia, conexão, alcance e configuração básica do roteador.","category":"Tecnologia","mode":"sos","formula":null};
-const DATA=["não liga|Teste outra tomada com um aparelho seguro|Confira fonte e conector sem abrir o roteador|Use somente fonte compatível indicada pelo fabricante","rede Wi-Fi sumiu|Observe os LEDs e aguarde a inicialização|Confira se o Wi-Fi foi desativado por botão ou configuração|Reinicie uma vez e consulte o manual do modelo","conecta mas não navega|Teste mais de um dispositivo|Confira cabos entre modem e roteador|Consulte o status da operadora antes de restaurar configurações","internet lenta|Faça medição perto do roteador e por cabo quando possível|Pause downloads e compare horários|Registre resultados antes de falar com a operadora","conexão cai|Observe horário, distância e dispositivos afetados|Afaste o roteador de obstáculos e fontes de interferência|Atualize o firmware somente pelo canal oficial","só um aparelho falha|Esqueça e reconecte a rede nesse aparelho|Confira data, IP automático e atualização do sistema|Não redefina o roteador se os demais funcionam"];
-const byId=id=>document.getElementById(id);
-const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const fmt=value=>Number(value).toLocaleString('pt-BR',{maximumFractionDigits:4});
-function clearResult(){const old=byId('out');if(old)old.remove()}
-function output(html){clearResult();byId('tool').insertAdjacentHTML('beforeend','<div id="out" class="result">'+html+'</div>')}
-function fields(items,type='text'){
- return '<div class="fields">'+items.map((item,index)=>{const spec=typeof item==='string'?{label:item}:item;const long=/perguntas|resumo|discuss|decis|delibera|ingredientes|preparo|observa|descri|orienta|impacto|alternativa|competência|critério/i.test(spec.label);const control=long?'<textarea id="f'+index+'" rows="3">'+esc(spec.value||'')+'</textarea>':'<input id="f'+index+'" type="'+(spec.type||type)+'" step="any" value="'+esc(spec.value||'')+'">';return '<label>'+esc(spec.label)+control+'</label>'}).join('')+'</div>'
-}
-function numbers(count){const values=[];for(let i=0;i<count;i++)values.push(Number(byId('f'+i).value));return values}
-function invalid(message){output('<p class="alert">'+esc(message)+'</p>')}
-function calculator(){
- const definitions={
-  energia:[{label:'Potência do aparelho (W)'},{label:'Horas de uso por dia'},{label:'Dias de uso no mês'},{label:'Tarifa informada (R$/kWh)'}],
-  volumetrico:[{label:'Comprimento (cm)'},{label:'Largura (cm)'},{label:'Altura (cm)'},{label:'Fator cúbico informado (cm³/kg)',value:'6000'}],
-  ritmo:[{label:'Distância (km)'},{label:'Tempo total (min)'}],
-  diluicao:[{label:'Concentração inicial'},{label:'Volume inicial (mL)'},{label:'Concentração final desejada'}],
-  bateria:[{label:'Tensão nominal (V)'},{label:'Capacidade (Ah)'},{label:'Corrente de carga (A)'},{label:'Eficiência estimada (%)',value:'85'}],
-  impressao:[{label:'Filamento usado (g)'},{label:'Preço do filamento (R$/kg)'},{label:'Tempo de impressão (h)'},{label:'Custo de máquina (R$/h)'},{label:'Energia medida/estimada (kWh)'},{label:'Tarifa informada (R$/kWh)'}],
-  cortina:[{label:'Largura a cobrir (cm)'},{label:'Fator de franzido',value:'2'},{label:'Altura pronta (cm)'},{label:'Soma de barras e cabeçalho (cm)'}],
-  presenca:[{label:'Presenças'},{label:'Encontros contabilizados'}],
-  voluntariado:[{label:'Pessoas'},{label:'Horas por pessoa e dia'},{label:'Dias de atividade'}],
-  ponderada:[{label:'Nota 1'},{label:'Peso 1'},{label:'Nota 2'},{label:'Peso 2'}]
- };
- const def=definitions[CONFIG.formula];byId('tool').innerHTML=fields(def,'number')+'<button id="run">Calcular</button>';
- byId('run').onclick=()=>{const v=numbers(def.length);if(v.some(x=>!Number.isFinite(x)))return invalid('Preencha todos os campos com números válidos.');let lines=[];
-  switch(CONFIG.formula){
-   case'energia':if(v[0]<0||v[1]<0||v[2]<0||v[3]<0)return invalid('Use valores iguais ou maiores que zero.');{const kwh=v[0]/1000*v[1]*v[2];lines=['Consumo estimado: '+fmt(kwh)+' kWh','Custo com a tarifa informada: R$ '+fmt(kwh*v[3])]}break;
-   case'volumetrico':if(v.some(x=>x<=0))return invalid('Dimensões e fator cúbico devem ser maiores que zero.');{const volume=v[0]*v[1]*v[2];lines=['Volume: '+fmt(volume/1000000)+' m³','Peso volumétrico com o fator informado: '+fmt(volume/v[3])+' kg']}break;
-   case'ritmo':if(v[0]<=0||v[1]<=0)return invalid('Distância e tempo devem ser maiores que zero.');{const pace=v[1]/v[0],min=Math.floor(pace),sec=Math.round((pace-min)*60);lines=['Ritmo médio: '+min+':'+String(sec===60?0:sec).padStart(2,'0')+' min/km','Velocidade média: '+fmt(v[0]/(v[1]/60))+' km/h']}break;
-   case'diluicao':if(v.some(x=>x<=0))return invalid('Concentrações e volume devem ser maiores que zero.');if(v[2]>v[0])return invalid('Para uma diluição simples, a concentração final não pode superar a inicial.');{const finalVolume=v[0]*v[1]/v[2];lines=['Volume final: '+fmt(finalVolume)+' mL','Volume de diluente: '+fmt(finalVolume-v[1])+' mL']}break;
-   case'bateria':if(v[0]<=0||v[1]<=0||v[2]<=0||v[3]<=0||v[3]>100)return invalid('Use valores positivos e eficiência entre 0 e 100%.');lines=['Energia nominal: '+fmt(v[0]*v[1])+' Wh','Tempo teórico ajustado: '+fmt(v[1]/(v[2]*(v[3]/100)))+' h'];break;
-   case'impressao':if(v.some(x=>x<0))return invalid('Os custos e consumos não podem ser negativos.');{const material=v[0]/1000*v[1],machine=v[2]*v[3],energy=v[4]*v[5];lines=['Material: R$ '+fmt(material),'Máquina: R$ '+fmt(machine),'Energia: R$ '+fmt(energy),'Total direto: R$ '+fmt(material+machine+energy)]}break;
-   case'cortina':if(v.some(x=>x<0)||v[0]===0||v[1]===0||v[2]===0)return invalid('Largura, fator e altura devem ser maiores que zero.');lines=['Largura total de tecido: '+fmt(v[0]*v[1])+' cm','Altura de corte: '+fmt(v[2]+v[3])+' cm'];break;
-   case'presenca':if(v[1]<=0||v[0]<0||v[0]>v[1])return invalid('Presenças devem ficar entre zero e o total de encontros.');lines=['Percentual de presença: '+fmt(v[0]/v[1]*100)+'%','Faltas: '+fmt(v[1]-v[0])];break;
-   case'voluntariado':if(v.some(x=>x<0))return invalid('Use valores iguais ou maiores que zero.');lines=['Horas totais registradas: '+fmt(v[0]*v[1]*v[2])+' h'];break;
-   default:if(v[1]<0||v[3]<0||v[1]+v[3]===0)return invalid('Os pesos devem ser positivos e a soma não pode ser zero.');lines=['Média ponderada: '+fmt((v[0]*v[1]+v[2]*v[3])/(v[1]+v[3]))]
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  if (root) root.SOSWifi = api;
+})(typeof window !== 'undefined' ? window : globalThis, function () {
+  'use strict';
+
+  const SOURCES = {
+    unstable: { label: 'TP-Link Brasil — conexão instável', url: 'https://www.tp-link.com/br/support/faq/2237/' },
+    missing: { label: 'TP-Link Brasil — rede Wi-Fi não aparece', url: 'https://www.tp-link.com/br/support/faq/2597/' },
+    lights: { label: 'TP-Link Brasil — luzes do roteador', url: 'https://www.tp-link.com/br/support/faq/3334/' },
+    speed: { label: 'TP-Link Brasil — velocidade do roteador e do acesso', url: 'https://www.tp-link.com/br/support/faq/2435/' },
+    anatel: { label: 'Anatel — velocidade da conexão e atendimento', url: 'https://www.gov.br/anatel/pt-br/consumidor/conheca-seus-direitos-2/telefonia-movel/velocidade-de-conexao-a-internet' }
+  };
+
+  const CASES = {
+    allOffline: {
+      title: 'Todos conectam ao Wi-Fi, mas ninguém acessa a internet', level: 'provedor ou enlace', sources: ['lights', 'unstable'],
+      checks: ['Confira no canal oficial do provedor se há indisponibilidade na região.', 'Observe as luzes sem concluir pelo nome: compare cor e padrão com o manual exato do aparelho.', 'Verifique externamente se os cabos de energia e da porta Internet/WAN estão firmes e sem dano.', 'Reinicie modem e roteador somente na ordem indicada pelo provedor ou pelos manuais; não pressione o botão de reset.'],
+      test: 'Teste novamente em dois aparelhos. Se todos continuam sem internet, registre horário, luzes observadas e protocolo do provedor.',
+      avoid: 'Não altere DNS, modo de operação, usuário da conexão ou endereço de rede antes de excluir indisponibilidade do provedor.'
+    },
+    wifiOnly: {
+      title: 'A conexão por cabo funciona, mas o Wi-Fi falha', level: 'rede sem fio', sources: ['missing', 'unstable'],
+      checks: ['Teste um aparelho perto do roteador e outro que já funcionava nessa rede.', 'Confirme no manual se a função Wi-Fi e suas luzes estão ativas; alguns modelos têm botão físico.', 'Afaste o equipamento de objetos que bloqueiem ventilação e de fontes evidentes de interferência.', 'Reinicie pelo procedimento do modelo e mantenha nome, senha, canal e largura atuais durante o primeiro teste.'],
+      test: 'Compare o mesmo aparelho perto e longe do roteador. Anote se a rede some, desconecta ou apenas perde velocidade.',
+      avoid: 'Não mude vários canais, bandas e larguras ao mesmo tempo; isso impede saber o que alterou o resultado.'
+    },
+    oneDevice: {
+      title: 'Só um celular ou computador apresenta o problema', level: 'aparelho específico', sources: ['missing'],
+      checks: ['Confirme que outros aparelhos acessam a mesma rede no mesmo local.', 'Desative e reative o Wi-Fi do aparelho e reinicie-o antes de mudar o roteador.', 'Confira modo avião, economia de energia, atualização do sistema e data/hora do aparelho.', 'Se você conhece a senha, remova a rede salva e conecte novamente; isso apaga configurações guardadas apenas naquele aparelho.'],
+      test: 'Teste o aparelho em outra rede conhecida e teste outro aparelho na rede de casa. Essa comparação localiza melhor a falha.',
+      avoid: 'Não restaure o roteador inteiro por causa de um único aparelho sem testar o próprio dispositivo.'
+    },
+    weakRoom: {
+      title: 'O sinal fica fraco ou cai em parte da casa', level: 'alcance e obstáculos', sources: ['speed', 'unstable'],
+      checks: ['Teste no mesmo aparelho a poucos metros do roteador e depois no local problemático.', 'Mantenha o roteador ventilado, fora de armário fechado e, quando possível, em posição central e desobstruída.', 'Observe paredes densas, espelhos, estruturas metálicas e equipamentos próximos entre os dois pontos.', 'Consulte o manual sobre as bandas disponíveis; alcance e velocidade negociada variam com aparelho, distância e interferência.'],
+      test: 'Faça três medições em posições fixas, sem mover o roteador durante a comparação. Registre local e horário.',
+      avoid: 'Não compre repetidor ou troque o plano antes de confirmar que o problema é de cobertura, não do acesso do provedor.'
+    },
+    unstableAll: {
+      title: 'A internet cai em vários aparelhos', level: 'instabilidade geral', sources: ['unstable', 'anatel'],
+      checks: ['Anote horário e duração das quedas e se as luzes mudam.', 'Compare, se disponível, um aparelho por cabo e um por Wi-Fi durante a mesma queda.', 'Verifique cabos externos e fonte de alimentação sem abrir o equipamento ou usar fonte incompatível.', 'Consulte indisponibilidade e abra protocolo no provedor antes de alterar configurações avançadas.'],
+      test: 'Informe ao suporte se a falha atinge cabo e Wi-Fi, quantos aparelhos foram testados e o padrão das luzes.',
+      avoid: 'Não reinicie repetidamente nem faça reset de fábrica: isso apaga evidências e pode remover a configuração do provedor.'
+    },
+    networkMissing: {
+      title: 'O nome da rede Wi-Fi não aparece', level: 'emissão ou compatibilidade', sources: ['missing', 'lights'],
+      checks: ['Veja se a rede aparece em outro aparelho perto do roteador.', 'Confirme que o Wi-Fi do aparelho está ativo e que modo avião está desligado.', 'Compare o estado da luz ou botão Wi-Fi com o manual do modelo.', 'Reinicie pelo procedimento oficial e confira se o aparelho suporta a banda configurada antes de alterar qualquer opção.'],
+      test: 'Se nenhum aparelho encontra a rede, registre luzes e modelo para o suporte. Se só um não encontra, trate como falha do aparelho.',
+      avoid: 'Não exponha senha, etiqueta, endereço de administração ou número de série em fóruns públicos.'
+    },
+    slow: {
+      title: 'A conexão funciona, mas parece lenta', level: 'medição comparável', sources: ['speed', 'anatel'],
+      checks: ['Pause downloads, nuvem, streaming e atualizações nos aparelhos usados no teste.', 'Teste perto do roteador e, se possível, também por cabo compatível, usando o mesmo servidor e horário aproximado.', 'Diferencie taxa do Wi-Fi, capacidade das portas e velocidade entregue pelo provedor: são números distintos.', 'Repita a medição em mais de um horário e guarde resultados e protocolo antes de reclamar.'],
+      test: 'Compare cabo × Wi-Fi e perto × longe. Um teste isolado não representa sozinho a qualidade do serviço.',
+      avoid: 'Não conclua que o plano está errado usando apenas o número anunciado na caixa do roteador.'
+    },
+    restarts: {
+      title: 'Roteador reinicia, aquece ou apaga sozinho', level: 'alimentação ou equipamento', sources: ['lights'],
+      checks: ['Pare de usar se houver cheiro, fumaça, faísca, líquido, tomada frouxa, cabo danificado ou calor anormal.', 'Mantenha as aberturas livres e o equipamento na posição prevista pelo fabricante.', 'Use somente a fonte especificada para o modelo; tensão igual não garante compatibilidade completa.', 'Anote quais luzes apagam e se ocorre sob carga, mas não abra a fonte ou o roteador.'],
+      test: 'Sem sinais de risco, consulte o suporte com modelo, fonte usada, padrão das luzes e frequência das reinicializações.',
+      avoid: 'Não cubra, não improvise ventilação interna e não teste outra fonte sem confirmar todas as especificações e polaridade.'
+    }
+  };
+
+  const RISK = {
+    title: 'Há sinal de risco: interrompa os testes', level: 'parada', sources: ['lights'],
+    checks: ['Desligue da tomada somente se isso puder ser feito sem contato com líquido, faísca ou parte danificada.', 'Afaste pessoas e materiais combustíveis do equipamento.', 'Não toque, não abra, não cheire de perto e não religue para confirmar o defeito.', 'Acione o provedor ou a assistência do fabricante; em risco imediato, use o serviço de emergência adequado.'],
+    test: 'Nenhum teste adicional é indicado enquanto houver sinal de risco.',
+    avoid: 'Não use outra fonte, extensão, adaptador ou peça improvisada.'
+  };
+
+  function escapeHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]; }); }
+  function getPlan(symptom, hasRisk) { return hasRisk ? RISK : CASES[symptom] || null; }
+  function renderPlan(plan) {
+    if (!plan) return '<p class="message">Selecione um sintoma válido.</p>';
+    const sourceLinks = plan.sources.map(function (id) { const source = SOURCES[id]; return '<a href="' + escapeHtml(source.url) + '" target="_blank" rel="noopener">' + escapeHtml(source.label) + '</a>'; }).join(' · ');
+    return '<section class="result ' + (plan.level === 'parada' ? 'stop' : '') + '"><div class="result-head"><div><p class="eyebrow">' + (plan.level === 'parada' ? 'PARE' : 'ROTA DE TRIAGEM') + '</p><h2>' + escapeHtml(plan.title) + '</h2></div><span>' + escapeHtml(plan.level) + '</span></div><ol>' + plan.checks.map(function (step) { return '<li>' + escapeHtml(step) + '</li>'; }).join('') + '</ol><div class="next"><div><strong>Como comparar</strong><p>' + escapeHtml(plan.test) + '</p></div><div><strong>Evite</strong><p>' + escapeHtml(plan.avoid) + '</p></div></div><p class="based">Fontes desta rota: ' + sourceLinks + '. O manual e o suporte do seu modelo prevalecem.</p></section>';
   }
-  output('<p class="eyebrow">RESULTADO</p>'+lines.map(x=>'<p>'+esc(x)+'</p>').join('')+'<p class="alert">Resultado informativo: confira unidades, premissas e regras da fonte indicada.</p>')
- }
-}
-function converter(){
- const units={pressao:['Pa','kPa','bar','atm'],temperatura:['°C','°F','K'],cozinha:['mL','L','colher de sopa','colher de chá'],bases:['Decimal','Binário','Hexadecimal'],angulos:['graus','radianos','grados'],energia:['kcal','J'],internet:['Mbit/s','MB/s'],densidade:['kg/m³','g/cm³'],torque:['N·m','kgf·m'],pixels:['px','cm']}[CONFIG.formula];
- const extra=CONFIG.formula==='pixels'?'<label>Resolução (PPI)<input id="ppi" type="number" min="0" step="any" value="300"></label>':'';
- byId('tool').innerHTML='<div class="fields"><label>Valor<input id="value" type="'+(CONFIG.formula==='bases'?'text':'number')+'" step="any" value="1"></label><label>De<select id="from">'+units.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select></label><label>Para<select id="to">'+units.map(x=>'<option>'+esc(x)+'</option>').join('')+'</select></label>'+extra+'</div><button id="run">Converter</button>';
- byId('run').onclick=()=>{const raw=byId('value').value.trim(),a=byId('from').selectedIndex,b=byId('to').selectedIndex;let result;
-  if(CONFIG.formula==='bases'){const patterns=[/^[+-]?\d+$/,/^[+-]?[01]+$/,/^[+-]?[0-9a-f]+$/i];if(!patterns[a].test(raw))return invalid('O valor não é válido para a base de origem.');const decimal=parseInt(raw,[10,2,16][a]);result=b===0?String(decimal):decimal.toString([10,2,16][b]).toUpperCase()}
-  else{const value=Number(raw);if(!Number.isFinite(value))return invalid('Informe um número válido.');
-   if(CONFIG.formula==='temperatura'){const c=a===0?value:a===1?(value-32)*5/9:value-273.15;if(c < -273.15-1e-9)return invalid('A temperatura informada fica abaixo do zero absoluto.');result=b===0?c:b===1?c*9/5+32:c+273.15}
-   else if(CONFIG.formula==='angulos'){const degrees=a===0?value:a===1?value*180/Math.PI:value*0.9;result=b===0?degrees:b===1?degrees*Math.PI/180:degrees/0.9}
-   else if(CONFIG.formula==='pixels'){const ppi=Number(byId('ppi').value);if(!Number.isFinite(ppi)||ppi<=0)return invalid('Informe uma resolução PPI maior que zero.');result=a===b?value:a===0?value/ppi*2.54:value/2.54*ppi}
-   else{const factors={pressao:[1,1000,100000,101325],cozinha:[1,1000,15,5],energia:[4184,1],internet:[0.125,1],densidade:[0.001,1],torque:[1,9.80665]}[CONFIG.formula];result=value*factors[a]/factors[b]}
+  function renderApp(doc) {
+    const form = doc.getElementById('triageForm');
+    if (!form) return;
+    const result = doc.getElementById('result');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      const plan = getPlan(doc.getElementById('symptom').value, doc.getElementById('risk').value === 'yes');
+      result.innerHTML = renderPlan(plan);
+      result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
-  output('<p class="eyebrow">RESULTADO</p><h3>'+esc(typeof result==='number'?fmt(result):result)+' '+esc(byId('to').value)+'</h3><p class="formula">A conversão usa a unidade de origem, a unidade de destino e, quando necessário, a resolução informada.</p>')
- }
-}
-function checklist(){byId('tool').innerHTML='<div class="checklist">'+DATA.map((item,index)=>'<label class="check-item"><input type="checkbox" data-index="'+index+'"><span>'+esc(item)+'</span></label>').join('')+'</div><div class="result"><strong id="progress">0 de '+DATA.length+' concluídos</strong></div>';const update=()=>{byId('progress').textContent=document.querySelectorAll('.check-item input:checked').length+' de '+DATA.length+' concluídos'};document.querySelectorAll('.check-item input').forEach(item=>item.addEventListener('change',update))}
-function glossary(){byId('tool').innerHTML='<label>Buscar termo<input id="search" type="search" placeholder="Digite um termo"></label><div id="cards" class="cards"></div>';const normalize=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const draw=()=>{const query=normalize(byId('search').value);byId('cards').innerHTML=DATA.filter(item=>normalize(item[0]).includes(query)||normalize(item[1]).includes(query)).map(item=>'<article><h3>'+esc(item[0])+'</h3><p>'+esc(item[1])+'</p></article>').join('')||'<p>Nenhum termo encontrado.</p>'};byId('search').addEventListener('input',draw);draw()}
-function generator(){byId('tool').innerHTML=fields(DATA)+'<button id="run">Gerar documento</button>';byId('run').onclick=()=>{const values=DATA.map((label,index)=>byId('f'+index).value.trim()||'não informado');const text=CONFIG.name.toUpperCase()+'\n\n'+DATA.map((label,index)=>label+': '+values[index]).join('\n')+'\n\nDocumento de trabalho — revise nomes, datas, permissões e exigências aplicáveis.';output('<p class="eyebrow">DOCUMENTO GERADO</p><pre class="output">'+esc(text)+'</pre><button id="copy">Copiar texto</button>');byId('copy').onclick=async()=>{try{await navigator.clipboard.writeText(text);byId('copy').textContent='Copiado'}catch{byId('copy').textContent='Selecione o texto para copiar'}}}}
-function sos(){const cases=DATA.map(row=>row.split('|'));byId('tool').innerHTML='<label>Sintoma observado<select id="choice">'+cases.map((item,index)=>'<option value="'+index+'">'+esc(item[0])+'</option>').join('')+'</select></label><button id="run">Ver triagem</button>';byId('run').onclick=()=>{const item=cases[Number(byId('choice').value)];output('<p class="eyebrow">TRIAGEM CONSERVADORA</p><h3>'+esc(item[0])+'</h3><ol>'+item.slice(1).map(step=>'<li>'+esc(step)+'</li>').join('')+'</ol><p class="alert">Pare imediatamente diante de fumaça, líquido, cheiro de queimado, calor excessivo ou risco elétrico. Não abra equipamento energizado.</p>')}}
-function guide(){const cases=DATA.map(row=>row.split('|'));byId('tool').innerHTML='<label>Uso principal<select id="choice">'+cases.map((item,index)=>'<option value="'+index+'">'+esc(item[0])+'</option>').join('')+'</select></label><button id="run">Comparar critérios</button>';byId('run').onclick=()=>{const item=cases[Number(byId('choice').value)];output('<p class="eyebrow">ORIENTAÇÃO PARA COMPARAR</p><h3>'+esc(item[0])+'</h3><p>'+esc(item[1])+'</p><h4>Confira na ficha técnica</h4><ul>'+item.slice(2).map(check=>'<li>'+esc(check)+'</li>').join('')+'</ul><p class="alert">Compatibilidade e manual do modelo prevalecem sobre recomendações gerais.</p>')}}
-function planner(){byId('tool').innerHTML=fields(DATA.fields)+'<button id="run">Montar plano</button>';byId('run').onclick=()=>{const values=DATA.fields.map((label,index)=>byId('f'+index).value.trim()||'não informado');output('<p class="eyebrow">PLANO INICIAL</p><dl>'+DATA.fields.map((label,index)=>'<dt>'+esc(label)+'</dt><dd>'+esc(values[index])+'</dd>').join('')+'</dl><ol>'+DATA.steps.map(step=>'<li>'+esc(step)+'</li>').join('')+'</ol><p class="alert">Revise o plano depois do primeiro ciclo e adapte à realidade local.</p>')}}
-({calc:calculator,converter,checklist,glossary,generator,sos,guide,planner}[CONFIG.mode]||planner)();
+  if (typeof document !== 'undefined') renderApp(document);
+  return { SOURCES, CASES, RISK, escapeHtml, getPlan, renderPlan, renderApp };
+});

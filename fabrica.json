@@ -1,8 +1,8 @@
 {
-    "id":  271,
+    "id":  140,
     "slug":  "sos-roteador-wifi",
-    "name":  "SOS Roteador Wi-Fi",
-    "description":  "Siga verificações externas para energia, conexão, alcance e configuração básica do roteador.",
-    "category":  "Tecnologia",
+    "name":  "SOS Wi-Fi Doméstico",
+    "description":  "Separe falha do provedor, do Wi-Fi e de um único aparelho com comparações externas e sem reset de fábrica.",
+    "category":  "SOS",
     "featured":  false
 }
